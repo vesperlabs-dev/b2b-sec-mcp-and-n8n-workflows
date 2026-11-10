@@ -1,0 +1,103 @@
+{
+  "name": "SEC EDGAR 8-K, 10-K & Form 4 Insider Trades Executive Monitor (Vesper Labs)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Real-Time SEC EDGAR Filings, Form 4 Insider Trades & XBRL Digest\n**How it works:**\n1. Every 6 hours, queries official US SEC EDGAR submissions and audited XBRL financial statements via `vesper26/sec-edgar-filings-mcp-server`.\n2. Extracts new `10-K`, `10-Q`, `8-K`, and `Form 4` insider transactions alongside latest audited USD Revenue, Net Income, and Cash balances.\n3. Formats clean executive alert cards ready to route to Slack, Microsoft Teams, Email, or Notion.\n\n**Setup (1 minute):**\n1. Create an **HTTP Header Auth** credential with Name `Authorization` and Value `Bearer <YOUR_APIFY_API_TOKEN>`.\n2. Customize the `tickers` watchlist (`NVDA`, `MSFT`, `AAPL`, etc.) in Step 1.",
+        "height": 340,
+        "width": 520,
+        "color": 4
+      },
+      "id": "sticky-0300-4000-8000-000000000099",
+      "name": "Sticky Note - Setup & Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        180,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "b3a00003-0001-4000-8000-000000000001",
+      "name": "Every 6 Hours Market Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/vesper26~sec-edgar-filings-mcp-server/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"tickers\": [\"NVDA\", \"MSFT\", \"AAPL\", \"CIEN\"],\n  \"formsFilter\": [\"10-K\", \"10-Q\", \"8-K\", \"4\"],\n  \"includeFinancials\": true,\n  \"maxFilingsPerCompany\": 5\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "b3a00003-0002-4000-8000-000000000002",
+      "name": "1. Fetch SEC Filings & XBRL Financials (vesper26)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format recent filings with human-readable USD billions/millions for Slack/Email digests\nconst fmtUsd = (n) => {\n  if (typeof n !== 'number') return 'N/A';\n  if (Math.abs(n) >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';\n  if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';\n  return '$' + n.toLocaleString();\n};\n\nreturn $input.all().map(item => {\n  const f = item.json;\n  const fin = f.xbrlFinancialSnapshot || {};\n  return {\n    json: {\n      ticker: f.ticker,\n      company: f.companyName,\n      form: f.form,\n      filingDate: f.filingDate,\n      filingUrl: f.filingUrl,\n      latestRevenue: fmtUsd(fin.revenueUsd),\n      latestNetIncome: fmtUsd(fin.netIncomeUsd),\n      latestCash: fmtUsd(fin.cashUsd),\n      alertHeadline: `[${f.ticker}] New SEC Form ${f.form} (${f.filingDate}) \u2014 Rev: ${fmtUsd(fin.revenueUsd)}, Cash: ${fmtUsd(fin.cashUsd)}`\n    }\n  };\n});"
+      },
+      "id": "b3a00003-0003-4000-8000-000000000003",
+      "name": "2. Format Financial Digest Cards",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Every 6 Hours Market Check": {
+      "main": [
+        [
+          {
+            "node": "1. Fetch SEC Filings & XBRL Financials (vesper26)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Fetch SEC Filings & XBRL Financials (vesper26)": {
+      "main": [
+        [
+          {
+            "node": "2. Format Financial Digest Cards",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

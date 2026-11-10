@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "vesper-sec-edgar-b2b": {
+      "url": "https://vesper26--sec-edgar-filings-mcp-server.apify.actor/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_APIFY_API_TOKEN"
+      }
+    }
+  }
+}
