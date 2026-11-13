@@ -1,19 +1,51 @@
 {
-  "name": "SEC EDGAR 8-K, 10-K & Form 4 Insider Trades Executive Monitor (Vesper Labs)",
+  "name": "SEC EDGAR 8-K, 10-K & Form 4 Insider Trades Executive Monitor & Digest (Vesper Labs)",
   "nodes": [
     {
       "parameters": {
-        "content": "## Real-Time SEC EDGAR Filings, Form 4 Insider Trades & XBRL Digest\n**How it works:**\n1. Every 6 hours, queries official US SEC EDGAR submissions and audited XBRL financial statements via `vesper26/sec-edgar-filings-mcp-server`.\n2. Extracts new `10-K`, `10-Q`, `8-K`, and `Form 4` insider transactions alongside latest audited USD Revenue, Net Income, and Cash balances.\n3. Formats clean executive alert cards ready to route to Slack, Microsoft Teams, Email, or Notion.\n\n**Setup (1 minute):**\n1. Create an **HTTP Header Auth** credential with Name `Authorization` and Value `Bearer <YOUR_APIFY_API_TOKEN>`.\n2. Customize the `tickers` watchlist (`NVDA`, `MSFT`, `AAPL`, etc.) in Step 1.",
-        "height": 340,
-        "width": 520,
+        "content": "## Real-Time SEC EDGAR Filings, Form 4 Insider Trades & XBRL Digest\n**What this template automates:**\n1. Polls official US SEC EDGAR filings (`10-K`, `10-Q`, `8-K`, `Form 4`) and audited XBRL financials via `vesper26/sec-edgar-filings-mcp-server`.\n2. Deduplicates accession numbers across runs so you only alert on **newly filed** disclosures.\n3. Routes **Material Events / Insider Trades (`8-K` & `Form 4`)** immediately to Slack while archiving all `10-K`/`10-Q`/financial snapshots to Google Sheets.\n\n**1-Minute Setup:**\n1. Create an **HTTP Header Auth** credential (`Name`: `Authorization`, `Value`: `Bearer <YOUR_APIFY_API_TOKEN>`) on node `2`.\n2. Edit `1. Workflow Config` with your ticker watchlist (`NVDA`, `MSFT`, `AAPL`, `CIEN`).",
+        "height": 380,
+        "width": 540,
         "color": 4
       },
-      "id": "sticky-0300-4000-8000-000000000099",
+      "id": "s3-01-setup",
       "name": "Sticky Note - Setup & Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        180,
+        60,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Stage 1: SEC EDGAR Poll & Accession Deduplication\nQueries `data.sec.gov` + XBRL `CompanyFacts` and suppresses previously seen accession numbers.",
+        "height": 140,
+        "width": 680,
+        "color": 5
+      },
+      "id": "s3-02-stage1",
+      "name": "Sticky Note - Stage 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Stage 2: XBRL Formatting, Priority Routing & Archive\nFormats USD billions/millions, routes urgent `Form 4` & `8-K` alerts to Slack, and logs every filing to Google Sheets.",
+        "height": 140,
+        "width": 760,
+        "color": 3
+      },
+      "id": "s3-03-stage2",
+      "name": "Sticky Note - Stage 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1360,
         -100
       ]
     },
@@ -28,13 +60,53 @@
           ]
         }
       },
-      "id": "b3a00003-0001-4000-8000-000000000001",
+      "id": "n3-01-schedule",
       "name": "Every 6 Hours Market Check",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        220,
-        300
+        120,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n3-02-manual",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        120,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-tickers",
+              "name": "tickersCsv",
+              "value": "NVDA,MSFT,AAPL,CIEN",
+              "type": "string"
+            },
+            {
+              "id": "cfg-slack",
+              "name": "slackChannel",
+              "value": "#sec-filings-alerts",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n3-03-config",
+      "name": "1. Workflow Config (Watchlist)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        380,
+        320
       ]
     },
     {
@@ -45,31 +117,180 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{\n  \"tickers\": [\"NVDA\", \"MSFT\", \"AAPL\", \"CIEN\"],\n  \"formsFilter\": [\"10-K\", \"10-Q\", \"8-K\", \"4\"],\n  \"includeFinancials\": true,\n  \"maxFilingsPerCompany\": 5\n}",
+        "jsonBody": "={{ JSON.stringify({ tickers: $json.tickersCsv.split(',').map(s => s.trim()).filter(Boolean), formsFilter: ['10-K', '10-Q', '8-K', '4'], includeFinancials: true, maxFilingsPerCompany: 5 }) }}",
         "options": {
           "timeout": 120000
         }
       },
-      "id": "b3a00003-0002-4000-8000-000000000002",
-      "name": "1. Fetch SEC Filings & XBRL Financials (vesper26)",
+      "id": "n3-04-sec",
+      "name": "2. Fetch SEC Filings & XBRL (vesper26)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        520,
-        300
+        660,
+        320
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('1. Workflow Config (Watchlist)').item.json.slackChannel }}",
+          "mode": "name"
+        },
+        "text": "=:warning: *SEC EDGAR Monitor Error* — Check your Apify credential. Error: {{ $json.message || 'Request failed' }}",
+        "otherOptions": {}
+      },
+      "id": "n3-05-errslack",
+      "name": "Alert Admin on SEC Fetch Error",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        920,
+        560
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Format recent filings with human-readable USD billions/millions for Slack/Email digests\nconst fmtUsd = (n) => {\n  if (typeof n !== 'number') return 'N/A';\n  if (Math.abs(n) >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';\n  if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';\n  return '$' + n.toLocaleString();\n};\n\nreturn $input.all().map(item => {\n  const f = item.json;\n  const fin = f.xbrlFinancialSnapshot || {};\n  return {\n    json: {\n      ticker: f.ticker,\n      company: f.companyName,\n      form: f.form,\n      filingDate: f.filingDate,\n      filingUrl: f.filingUrl,\n      latestRevenue: fmtUsd(fin.revenueUsd),\n      latestNetIncome: fmtUsd(fin.netIncomeUsd),\n      latestCash: fmtUsd(fin.cashUsd),\n      alertHeadline: `[${f.ticker}] New SEC Form ${f.form} (${f.filingDate}) \u2014 Rev: ${fmtUsd(fin.revenueUsd)}, Cash: ${fmtUsd(fin.cashUsd)}`\n    }\n  };\n});"
+        "jsCode": "// Deduplicate SEC accession numbers & format XBRL numbers cleanly\nconst staticData = $getWorkflowStaticData('global');\nstaticData.seenAccessions = staticData.seenAccessions || [];\nconst seen = new Set(staticData.seenAccessions);\n\nconst fmtUsd = (n) => {\n  if (typeof n !== 'number') return 'N/A';\n  if (Math.abs(n) >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';\n  if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';\n  return '$' + n.toLocaleString();\n};\n\nconst out = [];\nconst newlySeen = [];\nfor (const item of $input.all()) {\n  const f = item.json;\n  const key = f.accessionNumber || `${f.ticker}-${f.form}-${f.filingDate}`;\n  if (seen.has(key)) continue;\n  newlySeen.push(key);\n  const fin = f.xbrlFinancialSnapshot || {};\n  out.push({\n    json: {\n      accessionNumber: key,\n      ticker: f.ticker,\n      companyName: f.companyName,\n      form: f.form,\n      filingDate: f.filingDate,\n      filingUrl: f.filingUrl,\n      latestRevenue: fmtUsd(fin.revenueUsd),\n      latestNetIncome: fmtUsd(fin.netIncomeUsd),\n      latestCash: fmtUsd(fin.cashUsd),\n      isMaterialOrInsider: ['4', '8-K'].includes(String(f.form).toUpperCase()),\n      alertHeadline: `[${f.ticker}] New SEC Form ${f.form} (${f.filingDate}) — Rev: ${fmtUsd(fin.revenueUsd)}, Cash: ${fmtUsd(fin.cashUsd)}`\n    }\n  });\n}\n\nstaticData.seenAccessions = [...staticData.seenAccessions, ...newlySeen].slice(-1000);\nreturn out;"
       },
-      "id": "b3a00003-0003-4000-8000-000000000003",
-      "name": "2. Format Financial Digest Cards",
+      "id": "n3-06-format",
+      "name": "3. Deduplicate & Format XBRL Cards",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        820,
-        300
+        920,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-sec-new",
+              "leftValue": "={{ $json.accessionNumber }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n3-07-if-new",
+      "name": "4. New SEC Filing Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1180,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n3-08-noop",
+      "name": "No New Filings",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-sec-urgent",
+              "leftValue": "={{ $json.isMaterialOrInsider }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n3-09-priority",
+      "name": "5. Form 4 Insider or 8-K Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('1. Workflow Config (Watchlist)').item.json.slackChannel }}",
+          "mode": "name"
+        },
+        "text": "=:chart_with_upwards_trend: *{{ $json.alertHeadline }}*\n*Company:* {{ $json.companyName }} | *Form:* `{{ $json.form }}` | *Date:* {{ $json.filingDate }}\n*XBRL Snapshot:* Rev `{{ $json.latestRevenue }}` | Net Inc `{{ $json.latestNetIncome }}` | Cash `{{ $json.latestCash }}`\n<{{ $json.filingUrl }}|Read Official SEC Filing>",
+        "otherOptions": {}
+      },
+      "id": "n3-10-slack",
+      "name": "6a. Send Urgent Filing Alert (Slack)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1700,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "SecFilings"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "accessionNumber"
+          ]
+        },
+        "options": {}
+      },
+      "id": "n3-11-sheets",
+      "name": "6b. Archive Filing to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1960,
+        280
       ]
     }
   ],
@@ -78,18 +299,105 @@
       "main": [
         [
           {
-            "node": "1. Fetch SEC Filings & XBRL Financials (vesper26)",
+            "node": "1. Workflow Config (Watchlist)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "1. Fetch SEC Filings & XBRL Financials (vesper26)": {
+    "Manual Test Trigger": {
       "main": [
         [
           {
-            "node": "2. Format Financial Digest Cards",
+            "node": "1. Workflow Config (Watchlist)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Workflow Config (Watchlist)": {
+      "main": [
+        [
+          {
+            "node": "2. Fetch SEC Filings & XBRL (vesper26)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Fetch SEC Filings & XBRL (vesper26)": {
+      "main": [
+        [
+          {
+            "node": "3. Deduplicate & Format XBRL Cards",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Admin on SEC Fetch Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Deduplicate & Format XBRL Cards": {
+      "main": [
+        [
+          {
+            "node": "4. New SEC Filing Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. New SEC Filing Found?": {
+      "main": [
+        [
+          {
+            "node": "5. Form 4 Insider or 8-K Event?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No New Filings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Form 4 Insider or 8-K Event?": {
+      "main": [
+        [
+          {
+            "node": "6a. Send Urgent Filing Alert (Slack)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6b. Archive Filing to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6a. Send Urgent Filing Alert (Slack)": {
+      "main": [
+        [
+          {
+            "node": "6b. Archive Filing to Google Sheets",
             "type": "main",
             "index": 0
           }
