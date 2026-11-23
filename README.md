@@ -49,7 +49,7 @@ All five Actors run pure deterministic Node.js (zero LLM hallucination, zero res
 ## ⚡ Ready-to-Import `n8n` Workflow Blueprints
 
 * **Free Starter Included Here:** [`examples/sec-edgar-insider-alert-starter.json`](./examples/sec-edgar-insider-alert-starter.json) — Automated 6-hour SEC `Form 4` insider trade, `8-K`, and audited XBRL financial briefing workflow.
-* **Complete 3-Workflow B2B Signal & Churn Pack:** Grab all three production n8n pipelines (*Shopify Competitor Churn $\rightarrow$ Verified Founder Emails*, *Multi-ATS Hiring Signals $\rightarrow$ C-Suite Enricher*, and *SEC EDGAR Executive Monitor*) at **[vesperlabs.lemonsqueezy.com](https://vesperlabs.lemonsqueezy.com)**.
+* **Complete 3-Workflow B2B Signal & Churn Pack:** Grab all three production n8n pipelines (*Shopify Competitor Churn $\rightarrow$ Verified Founder Emails*, *Multi-ATS Hiring Signals $\rightarrow$ C-Suite Enricher*, and *SEC EDGAR Executive Monitor*) via **[Vesper Labs on Polar.sh](https://buy.polar.sh/polar_cl_GZtvhFRJvfYZJ7zB7bp4Yeae6voWI2ijxiJhl3ini8O)**.
 
 ---
 
