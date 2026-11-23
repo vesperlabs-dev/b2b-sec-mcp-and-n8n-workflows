@@ -1,0 +1,473 @@
+{
+  "name": "Multi-ATS Hiring Buying Signals -> MX-Verified Executive CRM Pipeline (Vesper Labs)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Multi-ATS Hiring Buying Signals -> Executive Outreach & CRM Sync\n**What this template automates:**\n1. Queries Greenhouse, Ashby, and Lever career boards (`vesper26/ats-hiring-signal-scraper`) for roles signaling new budget (`security_compliance_spend`, `ai_data_stack_investment`, `gtm_sales_scaling`).\n2. Deduplicates previously alerted jobs and aggregates open-role counts + normalized USD salary bands by company domain.\n3. Enriches active hiring accounts with live DNS MX verification and C-suite/VP emails (`vesper26/b2b-verified-contact-scraper`).\n4. Scores buying intent, alerts Slack for high-budget accounts (`$180k+` roles or multiple open signals), and upserts clean rows into Google Sheets.\n\n**1-Minute Setup:**\n1. Create an **HTTP Header Auth** credential (`Name`: `Authorization`, `Value`: `Bearer <YOUR_APIFY_API_TOKEN>`) on nodes `2` and `5`.\n2. Edit `1. Workflow Config` with your target companies and keyword filter.",
+        "height": 400,
+        "width": 540,
+        "color": 4
+      },
+      "id": "s2-01-setup",
+      "name": "Sticky Note - Setup & Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Stage 1: ATS Signal Extraction & Deduplication\nFetches Greenhouse, Ashby, and Lever roles, filters out jobs already seen on earlier runs, and extracts domains with active B2B buying signals.",
+        "height": 140,
+        "width": 700,
+        "color": 5
+      },
+      "id": "s2-02-stage1",
+      "name": "Sticky Note - Stage 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Stage 2: Decision-Maker Enrichment, Scoring & Delivery\nEnriches corporate MX + executive emails, merges hiring context, routes high-budget accounts to Slack, and logs all accounts to Google Sheets.",
+        "height": 140,
+        "width": 980,
+        "color": 3
+      },
+      "id": "s2-03-stage2",
+      "name": "Sticky Note - Stage 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "n2-01-schedule",
+      "name": "Daily Morning Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        120,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n2-02-manual",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        120,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-kw",
+              "name": "keywordFilter",
+              "value": "Security",
+              "type": "string"
+            },
+            {
+              "id": "cfg-min-sal",
+              "name": "highBudgetUsdThreshold",
+              "value": 180000,
+              "type": "number"
+            },
+            {
+              "id": "cfg-slack",
+              "name": "slackChannel",
+              "value": "#outbound-signals",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n2-03-config",
+      "name": "1. Workflow Config (Target Signal)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        380,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/vesper26~ats-hiring-signal-scraper/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ targets: [ { platform: 'greenhouse', slug: 'anthropic', domain: 'anthropic.com' }, { platform: 'ashby', slug: 'linear', domain: 'linear.app' }, { platform: 'lever', slug: 'palantir', domain: 'palantir.com' } ], keyword: $json.keywordFilter, remoteOnly: false, maxPerCompany: 25 }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "n2-04-ats",
+      "name": "2. Scan Greenhouse, Ashby & Lever (vesper26)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        320
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('1. Workflow Config (Target Signal)').item.json.slackChannel }}",
+          "mode": "name"
+        },
+        "text": "=:warning: *ATS Signal Scraper Error* — Verify your Apify token on `2. Scan Greenhouse, Ashby & Lever`. Error: {{ $json.message || 'Unknown error' }}",
+        "otherOptions": {}
+      },
+      "id": "n2-05-errslack",
+      "name": "Alert Admin on ATS Error",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        920,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Group new high-intent roles by company domain and deduplicate seen job IDs\nconst staticData = $getWorkflowStaticData('global');\nstaticData.seenJobUrls = staticData.seenJobUrls || [];\nconst seen = new Set(staticData.seenJobUrls);\n\nconst domainMap = { anthropic: 'anthropic.com', linear: 'linear.app', palantir: 'palantir.com' };\nconst summaryByDomain = {};\nconst newlySeen = [];\n\nfor (const item of $input.all()) {\n  const job = item.json;\n  if (!job.b2bBuyingSignals || job.b2bBuyingSignals.length === 0) continue;\n  if (job.applyUrl && seen.has(job.applyUrl)) continue;\n  if (job.applyUrl) newlySeen.push(job.applyUrl);\n\n  const dom = (job.companyDomain || domainMap[job.companySlug] || (job.companySlug + '.com')).toLowerCase();\n  if (!summaryByDomain[dom]) {\n    summaryByDomain[dom] = { domain: dom, rolesCount: 0, maxSalaryUsd: 0, sampleRoleTitle: job.title, sampleApplyUrl: job.applyUrl || '', signals: new Set() };\n  }\n  summaryByDomain[dom].rolesCount += 1;\n  const salMax = job.compensation?.maxUsd || job.compensation?.minUsd || 0;\n  if (salMax > summaryByDomain[dom].maxSalaryUsd) {\n    summaryByDomain[dom].maxSalaryUsd = salMax;\n    summaryByDomain[dom].sampleRoleTitle = job.title;\n    summaryByDomain[dom].sampleApplyUrl = job.applyUrl || '';\n  }\n  job.b2bBuyingSignals.forEach(s => summaryByDomain[dom].signals.add(s));\n}\n\nstaticData.seenJobUrls = [...staticData.seenJobUrls, ...newlySeen].slice(-1000);\nconst accounts = Object.values(summaryByDomain).map(a => ({ ...a, signals: Array.from(a.signals) }));\n\nreturn [{ json: { domains: accounts.map(a => a.domain), accountSummaries: accounts } }];"
+      },
+      "id": "n2-06-group",
+      "name": "3. Group Signals & Deduplicate Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-ats-domains",
+              "leftValue": "={{ $json.domains.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n2-07-if",
+      "name": "4. Any New Buying Signals?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1160,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n2-08-noop",
+      "name": "No New Hiring Signals",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/vesper26~b2b-verified-contact-scraper/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ domains: $json.domains, maxSubpages: 4, generateExecutivePermutations: true }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "n2-09-enrich",
+      "name": "5. Enrich Decision-Maker Contacts (vesper26)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1420,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Join hiring signal counts + salary budgets with verified MX executive contacts\nconst accounts = $('3. Group Signals & Deduplicate Jobs').item.json.accountSummaries || [];\nconst byDomain = Object.fromEntries(accounts.map(a => [a.domain, a]));\n\nreturn $input.all()\n  .map(i => i.json)\n  .filter(c => c && c.domain && c.mxVerification?.hasValidMx)\n  .map(c => {\n    const dom = c.domain.toLowerCase();\n    const sig = byDomain[dom] || {};\n    const execs = (c.likelyExecutiveEmails || []).slice(0, 3).map(e => e.email);\n    const directs = (c.directEmails || []).map(e => e.email);\n    return {\n      json: {\n        domain: dom,\n        companyName: c.companyName || dom,\n        rolesCount: sig.rolesCount || 0,\n        maxSalaryUsd: sig.maxSalaryUsd || 0,\n        sampleRoleTitle: sig.sampleRoleTitle || '',\n        sampleApplyUrl: sig.sampleApplyUrl || '',\n        buyingSignals: (sig.signals || []).join(', '),\n        mailProvider: c.mxVerification.mailProvider,\n        bestContactEmail: directs[0] || execs[0] || '',\n        executiveCandidates: execs.join(', '),\n        linkedinUrls: (c.socialProfiles?.linkedin || []).join(', ')\n      }\n    };\n  });"
+      },
+      "id": "n2-10-merge",
+      "name": "6. Merge Hiring Budget + Contacts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-high-budget",
+              "leftValue": "={{ $json.maxSalaryUsd }}",
+              "rightValue": "={{ $('1. Workflow Config (Target Signal)').item.json.highBudgetUsdThreshold }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n2-11-router",
+      "name": "7. High-Budget Role? (>= $180k)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('1. Workflow Config (Target Signal)').item.json.slackChannel }}",
+          "mode": "name"
+        },
+        "text": "=:dart: *High-Budget B2B Hiring Signal*\n*Account:* {{ $json.companyName }} (`{{ $json.domain }}`)\n*Open Roles:* {{ $json.rolesCount }} (Top Role: *{{ $json.sampleRoleTitle }}* up to `${{ $json.maxSalaryUsd.toLocaleString() }}`)\n*Signals:* `{{ $json.buyingSignals }}`\n*Verified Contact:* `{{ $json.bestContactEmail }}` ({{ $json.mailProvider }})\n<{{ $json.sampleApplyUrl }}|View Job Posting>",
+        "otherOptions": {}
+      },
+      "id": "n2-12-slack",
+      "name": "8a. Notify Outbound Channel (Slack)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2180,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "HiringSignals"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "domain"
+          ]
+        },
+        "options": {}
+      },
+      "id": "n2-13-sheets",
+      "name": "8b. Upsert Account to CRM Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2420,
+        280
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Morning Trigger": {
+      "main": [
+        [
+          {
+            "node": "1. Workflow Config (Target Signal)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "1. Workflow Config (Target Signal)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Workflow Config (Target Signal)": {
+      "main": [
+        [
+          {
+            "node": "2. Scan Greenhouse, Ashby & Lever (vesper26)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Scan Greenhouse, Ashby & Lever (vesper26)": {
+      "main": [
+        [
+          {
+            "node": "3. Group Signals & Deduplicate Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Admin on ATS Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Group Signals & Deduplicate Jobs": {
+      "main": [
+        [
+          {
+            "node": "4. Any New Buying Signals?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Any New Buying Signals?": {
+      "main": [
+        [
+          {
+            "node": "5. Enrich Decision-Maker Contacts (vesper26)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No New Hiring Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Enrich Decision-Maker Contacts (vesper26)": {
+      "main": [
+        [
+          {
+            "node": "6. Merge Hiring Budget + Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Merge Hiring Budget + Contacts": {
+      "main": [
+        [
+          {
+            "node": "7. High-Budget Role? (>= $180k)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. High-Budget Role? (>= $180k)": {
+      "main": [
+        [
+          {
+            "node": "8a. Notify Outbound Channel (Slack)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "8b. Upsert Account to CRM Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8a. Notify Outbound Channel (Slack)": {
+      "main": [
+        [
+          {
+            "node": "8b. Upsert Account to CRM Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -46,10 +46,13 @@ All five Actors run pure deterministic Node.js (zero LLM hallucination, zero res
 
 ---
 
-## ⚡ Ready-to-Import `n8n` Workflow Blueprints
+## ⚡ Free Ready-to-Import `n8n` Workflow Blueprints
 
-* **Free Starter Included Here:** [`examples/sec-edgar-insider-alert-starter.json`](./examples/sec-edgar-insider-alert-starter.json) — Automated 6-hour SEC `Form 4` insider trade, `8-K`, and audited XBRL financial briefing workflow.
-* **Complete 3-Workflow B2B Signal & Churn Pack:** Grab all three production n8n pipelines (*Shopify Competitor Churn $\rightarrow$ Verified Founder Emails*, *Multi-ATS Hiring Signals $\rightarrow$ C-Suite Enricher*, and *SEC EDGAR Executive Monitor*) via **[Vesper Labs on Polar.sh](https://buy.polar.sh/polar_cl_GZtvhFRJvfYZJ7zB7bp4Yeae6voWI2ijxiJhl3ini8O)**.
+All three production n8n pipelines are included **free** right in [`examples/`](./examples/) — just import into n8n and plug in your Apify API token (`HTTP Header Auth` → `Authorization: Bearer <YOUR_APIFY_API_TOKEN>`):
+
+1. **[Shopify Competitor Churn → Tech Stack & Verified Contacts](./examples/01-shopify-competitor-churn-to-verified-contacts.json)** *(21 nodes · also live on [n8n.io/workflows/22650](https://n8n.io/workflows/22650))* — Daily scan of 1–2★ competitor Shopify App Store reviews (`vesper26/saas-reviews-churn-signal-scraper`), parallel Shopify tech-stack fingerprinting (`vesper26/shopify-store-intelligence-scraper`) + DNS MX-verified executive enrichment (`vesper26/b2b-verified-contact-scraper`), 0–100 intent scoring, Slack alerts, and Google Sheets CRM upsert.
+2. **[Multi-ATS Hiring Buying Signals → Executive Outreach CRM](./examples/02-ats-hiring-intent-to-executive-emails.json)** *(16 nodes)* — Scans Greenhouse, Ashby, and Lever job feeds (`vesper26/ats-hiring-signal-scraper`) for high-budget B2B signals (`$180k+` roles, security/AI/GTM spend), deduplicates jobs, enriches MX-verified C-suite/VP emails (`vesper26/b2b-verified-contact-scraper`), alerts Slack, and upserts to Google Sheets.
+3. **[SEC EDGAR Form 4 Insider Trades, 8-K & 10-K Executive Monitor](./examples/sec-edgar-insider-alert-starter.json)** *(14 nodes)* — Polls `vesper26/sec-edgar-filings-mcp-server` every 6 hours for your ticker watchlist, deduplicates accession numbers, routes urgent `Form 4` / `8-K` disclosures + audited XBRL `$B`/`$M` metrics to Slack, and archives every filing to Google Sheets.
 
 ---
 

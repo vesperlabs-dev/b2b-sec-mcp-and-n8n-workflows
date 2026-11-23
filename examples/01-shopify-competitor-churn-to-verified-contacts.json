@@ -1,0 +1,619 @@
+{
+  "name": "Shopify Competitor Churn Sniper -> Tech Stack & MX-Verified Executive CRM Pipeline (Vesper Labs)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Shopify Competitor Churn -> Tech Stack & Verified Founder CRM Pipeline\n**What this template automates:**\n1. Scrapes fresh 1–2★ competitor reviews on the Shopify App Store (`vesper26/saas-reviews-churn-signal-scraper`).\n2. Deduplicates previously seen merchant domains using n8n workflow static data.\n3. Runs **parallel enrichment**: Shopify theme/app/catalog fingerprinting + live DNS MX & Executive Email enrichment.\n4. **Merges** both datasets, calculates a 0–100 `churnIntentScore`, routes **Hot Leads (>=70)** to Slack, and logs every qualified lead to Google Sheets.\n\n**1-Minute Setup:**\n1. Create an **HTTP Header Auth** credential (`Name`: `Authorization`, `Value`: `Bearer <YOUR_APIFY_API_TOKEN>`) and select it on nodes `2`, `5a`, and `5b`.\n2. Edit `1. Workflow Config` with any competitor Shopify App slug (e.g. `klaviyo-email-marketing`, `gorgias`, `recharge-subscriptions`).\n3. Connect your **Slack** and **Google Sheets** credentials (or swap for HubSpot/Airtable).",
+        "height": 420,
+        "width": 540,
+        "color": 4
+      },
+      "id": "s1-01-setup",
+      "name": "Sticky Note - Setup & Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Stage 1: Signal Capture & Deduplication\nFetches 1–2★ churn reviews, normalizes merchant domains, and skips any domain already processed in prior runs.",
+        "height": 140,
+        "width": 660,
+        "color": 5
+      },
+      "id": "s1-02-stage1",
+      "name": "Sticky Note - Stage 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Stage 2: Parallel Enrichment & Merge\nFingerprints the store's Shopify tech stack (theme, apps, pixels) AND verifies corporate MX + executive emails simultaneously, then merges by `domain`.",
+        "height": 140,
+        "width": 760,
+        "color": 6
+      },
+      "id": "s1-03-stage2",
+      "name": "Sticky Note - Stage 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Stage 3: Intent Scoring, Routing & Delivery\nScores each lead (0–100), alerts `#sales-signals` in Slack for hot prospects, and appends clean CRM rows to Google Sheets.",
+        "height": 140,
+        "width": 720,
+        "color": 3
+      },
+      "id": "s1-04-stage3",
+      "name": "Sticky Note - Stage 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2140,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "n1-01-schedule",
+      "name": "Daily Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        120,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n1-02-manual",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        120,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-slug",
+              "name": "competitorAppSlug",
+              "value": "klaviyo-email-marketing",
+              "type": "string"
+            },
+            {
+              "id": "cfg-max",
+              "name": "maxReviews",
+              "value": 25,
+              "type": "number"
+            },
+            {
+              "id": "cfg-score",
+              "name": "minHotScore",
+              "value": 70,
+              "type": "number"
+            },
+            {
+              "id": "cfg-slack",
+              "name": "slackChannel",
+              "value": "#sales-signals",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n1-03-config",
+      "name": "1. Workflow Config (Set Target App)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        380,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/vesper26~saas-reviews-churn-signal-scraper/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ targets: [{ platform: 'shopify', slug: $json.competitorAppSlug }], ratingsFilter: [1, 2], churnLeadsOnly: true, maxReviewsPerApp: $json.maxReviews }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "n1-04-reviews",
+      "name": "2. Scrape 1-2 Star Churn Reviews (vesper26)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        320
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('1. Workflow Config (Set Target App)').item.json.slackChannel }}",
+          "mode": "name"
+        },
+        "text": "=:warning: *Shopify Churn Scraper Error* — Check your Apify API credential or target slug (`{{ $('1. Workflow Config (Set Target App)').item.json.competitorAppSlug }}`). Error: {{ $json.message || 'Request failed' }}",
+        "otherOptions": {}
+      },
+      "id": "n1-05-errslack",
+      "name": "Alert Admin on Scraper Error",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        920,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize merchant names into candidate domains & deduplicate across runs\nconst staticData = $getWorkflowStaticData('global');\nstaticData.seenDomains = staticData.seenDomains || [];\nconst seen = new Set(staticData.seenDomains);\n\nconst items = $input.all();\nconst newDomains = [];\nconst reviewsByDomain = {};\n\nfor (const item of items) {\n  const d = item.json;\n  if (!d.merchantStoreName) continue;\n  const slug = d.merchantStoreName.toLowerCase().replace(/[^a-z0-9]/g, '');\n  if (slug.length < 3) continue;\n  const domain = slug + '.com';\n  if (seen.has(domain) || reviewsByDomain[domain]) continue;\n  reviewsByDomain[domain] = {\n    merchantStoreName: d.merchantStoreName,\n    rating: d.rating || 1,\n    reviewDate: d.reviewDate || '',\n    tenure: d.tenure || 'Unknown',\n    churnSignals: d.churnSignals || [],\n    reviewExcerpt: (d.reviewText || '').slice(0, 280)\n  };\n  newDomains.push(domain);\n}\n\nconst batch = newDomains.slice(0, 15);\nstaticData.seenDomains = [...staticData.seenDomains, ...batch].slice(-500);\n\nreturn [{ json: { domains: batch, reviewsByDomain } }];"
+      },
+      "id": "n1-06-dedup",
+      "name": "3. Extract & Deduplicate Domains",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-domains",
+              "leftValue": "={{ $json.domains.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n1-07-if-domains",
+      "name": "4. Any New Churn Domains?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1160,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n1-08-noop",
+      "name": "No New Leads Today",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/vesper26~shopify-store-intelligence-scraper/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ stores: $json.domains, mode: 'store_summary_only', maxProductsPerStore: 5 }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "n1-09-shopify",
+      "name": "5a. Fingerprint Shopify Tech Stack (vesper26)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1420,
+        120
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/vesper26~b2b-verified-contact-scraper/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ domains: $json.domains, maxSubpages: 4, generateExecutivePermutations: true }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "n1-10-contacts",
+      "name": "5b. Enrich MX-Verified Contacts (vesper26)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1420,
+        360
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Shopify store summaries keyed by domain\nreturn $input.all()\n  .map(i => i.json)\n  .filter(s => s && s.domain)\n  .map(s => ({\n    json: {\n      domain: s.domain.toLowerCase(),\n      isConfirmedShopify: Boolean(s.myshopifyDomain || s.themeName),\n      myshopifyDomain: s.myshopifyDomain || '',\n      themeName: s.themeName || 'Unknown',\n      installedApps: (s.installedApps || []).join(', '),\n      productCount: s.productCount || 0,\n      currency: s.currency || 'USD'\n    }\n  }));"
+      },
+      "id": "n1-11-normshop",
+      "name": "6a. Normalize Store Tech Stack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keep only domains with valid MX records & extract executive/direct contacts\nreturn $input.all()\n  .map(i => i.json)\n  .filter(c => c && c.domain && c.mxVerification && c.mxVerification.hasValidMx)\n  .map(c => ({\n    json: {\n      domain: c.domain.toLowerCase(),\n      companyName: c.companyName || c.domain,\n      mailProvider: c.mxVerification.mailProvider || 'Unknown',\n      directEmails: (c.directEmails || []).map(e => e.email),\n      likelyExecutiveEmails: (c.likelyExecutiveEmails || []).slice(0, 3).map(e => e.email),\n      roleEmails: (c.roleEmails || []).map(e => e.email),\n      linkedinProfiles: (c.socialProfiles && c.socialProfiles.linkedin) || []\n    }\n  }));"
+      },
+      "id": "n1-12-normcontacts",
+      "name": "6b. Filter Valid MX Contacts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByFields",
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "domain",
+              "field2": "domain"
+            }
+          ]
+        },
+        "options": {
+          "includeUnpaired": false
+        }
+      },
+      "id": "n1-13-merge",
+      "name": "7. Merge Tech Stack + Verified Contacts",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1920,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Score each qualified lead (0-100) and attach original churn review context\nconst reviewsByDomain = $('3. Extract & Deduplicate Domains').item.json.reviewsByDomain || {};\nconst targetApp = $('1. Workflow Config (Set Target App)').item.json.competitorAppSlug;\n\nreturn $input.all().map(item => {\n  const d = item.json;\n  const rev = reviewsByDomain[d.domain] || {};\n  let score = 25; // Base: valid MX verified domain\n  if (rev.rating === 1) score += 25; else if (rev.rating === 2) score += 15;\n  if (d.isConfirmedShopify) score += 20;\n  if ((d.directEmails || []).length > 0 || (d.likelyExecutiveEmails || []).length > 0) score += 20;\n  if ((rev.churnSignals || []).length > 0) score += 10;\n\n  const bestContact = (d.directEmails && d.directEmails[0]) || (d.likelyExecutiveEmails && d.likelyExecutiveEmails[0]) || (d.roleEmails && d.roleEmails[0]) || '';\n\n  return {\n    json: {\n      churnIntentScore: Math.min(100, score),\n      domain: d.domain,\n      companyName: d.companyName || rev.merchantStoreName || d.domain,\n      bestContactEmail: bestContact,\n      allCandidateEmails: [...(d.directEmails || []), ...(d.likelyExecutiveEmails || [])].join(', '),\n      mailProvider: d.mailProvider,\n      isConfirmedShopify: d.isConfirmedShopify,\n      shopifyTheme: d.themeName,\n      installedApps: d.installedApps,\n      productCount: d.productCount,\n      competitorAppChurned: targetApp,\n      reviewRating: rev.rating || '',\n      merchantTenure: rev.tenure || '',\n      churnSignals: (rev.churnSignals || []).join(', '),\n      reviewExcerpt: rev.reviewExcerpt || '',\n      linkedinUrls: (d.linkedinProfiles || []).join(', '),\n      complianceNote: 'Business contact only; Data Controller responsible for GDPR/CAN-SPAM opt-out.'\n    }\n  };\n});"
+      },
+      "id": "n1-14-score",
+      "name": "8. Score Churn Intent & Enrich Quote",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-hot-score",
+              "leftValue": "={{ $json.churnIntentScore }}",
+              "rightValue": "={{ $('1. Workflow Config (Set Target App)').item.json.minHotScore }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n1-15-router",
+      "name": "9. Hot Lead? (Score >= Threshold)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('1. Workflow Config (Set Target App)').item.json.slackChannel }}",
+          "mode": "name"
+        },
+        "text": "=:fire: *Hot Shopify Churn Lead (Score {{ $json.churnIntentScore }}/100)*\n*Store:* {{ $json.companyName }} (`https://{{ $json.domain }}`)\n*Churned From:* `{{ $json.competitorAppChurned }}` ({{ $json.reviewRating }}★ • {{ $json.merchantTenure }})\n*Best Contact:* `{{ $json.bestContactEmail }}` ({{ $json.mailProvider }})\n*Stack:* Theme `{{ $json.shopifyTheme }}` | Apps: {{ $json.installedApps || 'N/A' }}\n> _{{ $json.reviewExcerpt }}_",
+        "otherOptions": {}
+      },
+      "id": "n1-16-slack",
+      "name": "10a. Alert Sales Channel (Slack)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2660,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "ChurnLeads"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "domain"
+          ]
+        },
+        "options": {}
+      },
+      "id": "n1-17-sheets",
+      "name": "10b. Upsert Lead to CRM Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2920,
+        280
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "1. Workflow Config (Set Target App)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "1. Workflow Config (Set Target App)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Workflow Config (Set Target App)": {
+      "main": [
+        [
+          {
+            "node": "2. Scrape 1-2 Star Churn Reviews (vesper26)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Scrape 1-2 Star Churn Reviews (vesper26)": {
+      "main": [
+        [
+          {
+            "node": "3. Extract & Deduplicate Domains",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Admin on Scraper Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Extract & Deduplicate Domains": {
+      "main": [
+        [
+          {
+            "node": "4. Any New Churn Domains?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Any New Churn Domains?": {
+      "main": [
+        [
+          {
+            "node": "5a. Fingerprint Shopify Tech Stack (vesper26)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "5b. Enrich MX-Verified Contacts (vesper26)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No New Leads Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5a. Fingerprint Shopify Tech Stack (vesper26)": {
+      "main": [
+        [
+          {
+            "node": "6a. Normalize Store Tech Stack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Enrich MX-Verified Contacts (vesper26)": {
+      "main": [
+        [
+          {
+            "node": "6b. Filter Valid MX Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6a. Normalize Store Tech Stack": {
+      "main": [
+        [
+          {
+            "node": "7. Merge Tech Stack + Verified Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Filter Valid MX Contacts": {
+      "main": [
+        [
+          {
+            "node": "7. Merge Tech Stack + Verified Contacts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "7. Merge Tech Stack + Verified Contacts": {
+      "main": [
+        [
+          {
+            "node": "8. Score Churn Intent & Enrich Quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Score Churn Intent & Enrich Quote": {
+      "main": [
+        [
+          {
+            "node": "9. Hot Lead? (Score >= Threshold)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Hot Lead? (Score >= Threshold)": {
+      "main": [
+        [
+          {
+            "node": "10a. Alert Sales Channel (Slack)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "10b. Upsert Lead to CRM Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10a. Alert Sales Channel (Slack)": {
+      "main": [
+        [
+          {
+            "node": "10b. Upsert Lead to CRM Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
